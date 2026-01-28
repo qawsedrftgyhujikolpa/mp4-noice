@@ -1,0 +1,17 @@
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# MP4-NOICE Project folders
+# 初心者メモ: ここに書かれたフォルダの中身は、GitHubにアップロードされなくなります。
+# プライバシーを守るための必須設定です。
+uploads/
+processed_videos/
+
+# OS
+.DS_Store
+Thumbs.db

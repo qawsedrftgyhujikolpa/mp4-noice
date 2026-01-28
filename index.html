@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MP4-NOICE - Absolute Noise Protection</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .footer-credits {
+            margin-top: 1rem;
+            font-size: 0.8rem;
+            color: var(--text-sub);
+            line-height: 1.6;
+        }
+
+        .footer-credits a {
+            color: var(--primary);
+            text-decoration: none;
+            transition: opacity 0.2s;
+        }
+
+        .footer-credits a:hover {
+            opacity: 0.7;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+    <header class="header">
+        <h1 class="header-title">
+            <span class="gradient-text">MP4-NOICE</span>
+            <span class="subtitle">完全ノイズ迷彩・動体抽出システム</span>
+        </h1>
+    </header>
+
+    <main class="main-container">
+        <div id="dropzone" class="dropzone">
+            <div class="dropzone-content">
+                <div class="dropzone-icon">🌫️</div>
+                <h2>動画を砂嵐へ変換</h2>
+                <p>静止しているものは、背景のノイズと同化して消滅します。<br>
+                    動いているものだけが、ザラついた「違和感」として現れます。</p>
+                <label class="file-select-btn">
+                    動画を選択
+                    <input type="file" id="fileInput" accept="video/mp4,video/webm" hidden>
+                </label>
+            </div>
+        </div>
+
+        <div id="resultContainer" class="result-container">
+            <img id="resultImage" src="" alt="Processing Result">
+            <div class="status-badge" id="statusMessage">ノイズ同期中...</div>
+            <div class="button-group">
+                <button id="resetBtn" class="control-btn danger">
+                    <span>🔄</span> 解析リセット
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="footer-credits">
+            <p>Contact: <a href="mailto:pqlpp@proton.me">pqlpp@proton.me</a></p>
+            <p>Repo: <a href="https://github.com/qawsedrftgyhujikolpa/mp4-noice"
+                    target="_blank">github.com/qawsedrftgyhujikolpa/mp4-noice</a></p>
+        </div>
+        <p style="margin-top: 1.5rem; font-size: 0.7rem; opacity: 0.5;">🚀 Built by AntiGravity Agent</p>
+    </footer>
+
+    <script src="main.js"></script>
+</body>
+
+</html>
