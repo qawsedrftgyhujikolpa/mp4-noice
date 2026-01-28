@@ -6,99 +6,131 @@ from fastapi.responses import StreamingResponse, HTMLResponse, FileResponse
 import uvicorn
 import os
 import time
+import logging
 
 # ==================================================
-# サーバー設定 (Server Setup)
+# ロギング (進捗が見えるように)
 # ==================================================
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.FileHandler("server.log", encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger("LIMIT-BREAK")
+
 app = FastAPI()
-
-# フォルダ設定
-UPLOAD_DIR = "uploads"          # 元動画（一時保存用）
-OUTPUT_DIR = "processed_videos" # 解析後動画（保存用）
-
-# 起動時に必要なフォルダがなければ作る
+UPLOAD_DIR, OUTPUT_DIR = "uploads", "processed_videos"
 for d in [UPLOAD_DIR, OUTPUT_DIR]:
-    if not os.path.exists(d):
-        os.makedirs(d)
+    if not os.path.exists(d): os.makedirs(d)
+
+def create_noise_pool(w, h, size=20):
+    return [np.random.randint(0, 256, (h, w, 3), dtype=np.uint8) for _ in range(size)]
 
 # --------------------------------------------------
-# 画像処理関数 (Generator) - 真・ノイズ迷彩
+# 真・限界突破 NITRO エンジン
 # --------------------------------------------------
+def fast_process_video_nitro(temp_path: str, output_path: str):
+    cap = cv2.VideoCapture(temp_path)
+    if not cap.isOpened(): return
+    
+    # 元のスペック
+    orig_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    orig_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    # ⚡ 爆速リサイズ戦略
+    # 720pを超える場合は、強制的にダウンスケールして計算負荷を四分の三以下に削る
+    target_w = orig_w
+    if orig_w > 1280:
+        target_w = 1280
+    
+    scale = target_w / orig_w
+    h = int(orig_h * scale)
+    w = target_w
+
+    out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
+    
+    static_noise = np.random.randint(0, 256, (h, w, 3), dtype=np.uint8)
+    pool = create_noise_pool(w, h, 20)
+    
+    ret, prev_frame = cap.read()
+    if not ret: return
+    if scale != 1.0: prev_frame = cv2.resize(prev_frame, (w, h))
+    prev_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
+    
+    p_idx = 0
+    logger.info(f"🚀 LIMIT BREAK: {orig_w}p -> {w}p に最適化して爆走します (全{total_frames}フレーム)")
+
+    # 高速リファレンス
+    read = cap.read
+    write = out.write
+    diff = cv2.absdiff
+    thresh = cv2.threshold
+    cvt = cv2.cvtColor
+    resize = cv2.resize
+
+    last_log_time = time.time()
+
+    while True:
+        ret, frame = read()
+        if not ret: break
+
+        # リサイズ（必要なら）
+        if scale != 1.0: frame = resize(frame, (w, h))
+
+        gray = cvt(frame, cv2.COLOR_BGR2GRAY)
+        frame_diff = diff(gray, prev_gray)
+        _, mask = thresh(frame_diff, 25, 255, cv2.THRESH_BINARY)
+        
+        # 合成
+        res = static_noise.copy()
+        res[mask > 0] = pool[p_idx % 20][mask > 0]
+        
+        write(res)
+        prev_gray = gray
+        p_idx += 1
+
+        # 1秒おきに進捗を報告
+        if time.time() - last_log_time > 1.0:
+            progress = (p_idx / total_frames) * 100
+            logger.info(f"📊 進捗: {progress:.1f}% ({p_idx}/{total_frames})")
+            last_log_time = time.time()
+    
+    cap.release()
+    out.release()
+    if os.path.exists(temp_path): os.remove(temp_path)
+    logger.info("🏁 限界突破完了: 現代人の勝利です")
+
+# (Preview用はそのまま)
 def process_video_generator(temp_path: str, output_path: str):
     cap = cv2.VideoCapture(temp_path)
-    out = None
-
-    try:
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        if fps == 0: fps = 30.0
-
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
-
-        # 動体検知 MOG2
-        backSub = cv2.createBackgroundSubtractorMOG2(history=500, varThreshold=50, detectShadows=False)
-
-        # 固定背景ノイズ (Gray -> BGR)
-        static_noise_base = np.random.randint(0, 256, (height, width), dtype=np.uint8)
-        static_noise = cv2.cvtColor(static_noise_base, cv2.COLOR_GRAY2BGR)
-
-        print(f"💀 MP4-NOICE 変換開始: {temp_path}")
-
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-
-            # 動きの抽出
-            fg_mask = backSub.apply(frame)
-            kernel = np.ones((5,5), np.uint8)
-            fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_CLOSE, kernel)
-            mask_3ch = cv2.cvtColor(fg_mask, cv2.COLOR_GRAY2BGR)
-
-            # 動的ノイズ
-            dynamic_noise_base = np.random.randint(0, 256, (height, width), dtype=np.uint8)
-            dynamic_noise = cv2.cvtColor(dynamic_noise_base, cv2.COLOR_GRAY2BGR)
-
-            # 合成: 動きがあるところ=動的ノイズ, ないところ=固定ノイズ
-            result_frame = np.where(mask_3ch == 255, dynamic_noise, static_noise)
-
-            out.write(result_frame)
-            _, buffer = cv2.imencode('.jpg', result_frame)
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
-
-    except Exception as e:
-        print(f"❌ 解析エラー: {e}")
-    finally:
-        # リソース解放
-        if cap: cap.release()
-        if out: out.release()
-        
-        # ==================================================
-        # 【重要】証拠隠滅ロジック
-        # 処理が終わったら、uploadsフォルダ内の元の重い動画は削除します。
-        # 初心者のあなたでも安心して何度も実行できるように。
-        # ==================================================
-        if os.path.exists(temp_path):
-            try:
-                os.remove(temp_path)
-                print(f"🗑️ 一時ファイルを消去しました: {temp_path}")
-            except Exception as e:
-                print(f"⚠️ ファイル消去に失敗（他で使ってるかも）: {e}")
-
-# ==================================================
-# エンドポイント
-# ==================================================
+    w, h = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
+    backSub = cv2.createBackgroundSubtractorMOG2(history=300, varThreshold=50, detectShadows=False)
+    static_noise = np.random.randint(0, 256, (h, w, 3), dtype=np.uint8)
+    pool = create_noise_pool(w, h, 10)
+    p_idx = 0
+    while True:
+        ret, frame = cap.read()
+        if not ret: break
+        mask = backSub.apply(frame)
+        res = static_noise.copy()
+        res[mask > 0] = pool[p_idx % 10][mask > 0]
+        out.write(res)
+        _, buffer = cv2.imencode('.jpg', res)
+        yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+        p_idx += 1
+    cap.release(); out.release()
+    if os.path.exists(temp_path): os.remove(temp_path)
 
 @app.get("/")
 def main():
-    try:
-        with open("index.html", "r", encoding="utf-8") as f:
-            return HTMLResponse(content=f.read())
-    except FileNotFoundError:
-        return HTMLResponse(content="<h1>index.htmlが見つかりません。</h1>")
+    with open("index.html", "r", encoding="utf-8") as f: return HTMLResponse(content=f.read())
 
 @app.get("/style.css")
 async def get_css(): return FileResponse("style.css")
@@ -106,37 +138,31 @@ async def get_css(): return FileResponse("style.css")
 @app.get("/main.js")
 async def get_js(): return FileResponse("main.js")
 
-@app.get("/download/{filename}")
-async def download_file(filename: str):
-    path = os.path.join(OUTPUT_DIR, filename)
-    if os.path.exists(path):
-        return FileResponse(path, media_type='video/mp4', filename=f"noiced_{filename}")
-    return {"error": "File not found"}
+@app.get("/logs")
+async def get_logs():
+    if not os.path.exists("server.log"): return {"logs": "Logging..."}
+    with open("server.log", "r", encoding="utf-8") as f: return {"logs": "".join(f.readlines()[-10:])}
 
 @app.post("/upload")
 async def upload_video(file: UploadFile = File(...)):
-    # uploads フォルダの中にユニークな名前で保存
-    timestamp = int(time.time())
-    safe_name = f"raw_{timestamp}_{file.filename.replace(' ', '_')}"
-    temp_path = os.path.join(UPLOAD_DIR, safe_name)
-    
-    with open(temp_path, "wb") as buffer:
-        content = await file.read()
-        buffer.write(content)
-    
-    output_filename = f"out_{timestamp}.mp4"
-    return {"temp_name": safe_name, "output_name": output_filename}
+    ts = int(time.time())
+    path = os.path.join(UPLOAD_DIR, f"raw_{ts}_{file.filename.replace(' ', '_')}")
+    with open(path, "wb") as b: b.write(await file.read())
+    return {"temp_name": os.path.basename(path), "output_name": f"nitro_{ts}.mp4"}
 
 @app.get("/stream/{temp_name}/{output_name}")
 async def stream_video(temp_name: str, output_name: str):
-    # uploads フォルダから読み取り、processed_videos へ書き出す
-    temp_path = os.path.join(UPLOAD_DIR, temp_name)
-    output_path = os.path.join(OUTPUT_DIR, output_name)
-    
-    return StreamingResponse(
-        process_video_generator(temp_path, output_path),
-        media_type="multipart/x-mixed-replace; boundary=frame"
-    )
+    return StreamingResponse(process_video_generator(os.path.join(UPLOAD_DIR, temp_name), os.path.join(OUTPUT_DIR, output_name)),
+                             media_type="multipart/x-mixed-replace; boundary=frame")
+
+@app.get("/nitro_process/{temp_name}/{output_name}")
+async def run_nitro_process(temp_name: str, output_name: str):
+    fast_process_video_nitro(os.path.join(UPLOAD_DIR, temp_name), os.path.join(OUTPUT_DIR, output_name))
+    return {"status": "completed", "url": f"/download/{output_name}"}
+
+@app.get("/download/{filename}")
+async def download_file(filename: str):
+    return FileResponse(os.path.join(OUTPUT_DIR, filename), media_type='video/mp4', filename=f"noiced_{filename}")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)

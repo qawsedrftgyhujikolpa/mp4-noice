@@ -4,26 +4,117 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MP4-NOICE - Absolute Noise Protection</title>
+    <title>MP4-NOICE - Signal Protection</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <style>
         .footer-credits {
-            margin-top: 1rem;
+            margin: 1rem 0;
             font-size: 0.8rem;
             color: var(--text-sub);
-            line-height: 1.6;
         }
 
         .footer-credits a {
             color: var(--primary);
             text-decoration: none;
-            transition: opacity 0.2s;
         }
 
-        .footer-credits a:hover {
+        #downloadBtn,
+        #skipBtn {
+            display: none;
+        }
+
+        /* AA表示用のスタイル */
+        .ascii-art-container {
+            font-family: "MS PGothic", "MS Gothic", monospace;
+            font-size: 14px;
+            line-height: 1.2;
+            color: var(--primary);
+            background: rgba(0, 0, 0, 0.2);
+            padding: 15px;
+            border-radius: 12px;
+            margin-top: 15px;
+            white-space: pre;
+            text-align: left;
+            min-height: 80px;
+            display: none;
+            /* 最初は隠す */
+        }
+
+        .ascii-art-container.active {
+            display: block;
+        }
+
+        .vibrating {
+            animation: vibrate 0.1s infinite;
+        }
+
+        @keyframes vibrate {
+            0% {
+                transform: translate(0, 0);
+            }
+
+            50% {
+                transform: translate(2px, 1px);
+            }
+
+            100% {
+                transform: translate(0, 0);
+            }
+        }
+
+        .processing-loader {
+            display: none;
+            width: 50px;
+            height: 50px;
+            border: 5px solid var(--glass);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 20px 0;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* プログレスバー */
+        .progress-container {
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            margin: 15px 0;
+            overflow: hidden;
+            display: none;
+        }
+
+        .progress-bar {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+            box-shadow: 0 0 10px var(--primary);
+            transition: width 0.3s ease;
+        }
+
+        /* ログコンソール */
+        .log-console {
+            width: 100%;
+            max-width: 600px;
+            background: #000;
+            border: 1px solid var(--glass);
+            border-radius: 8px;
+            padding: 10px;
+            margin-top: 20px;
+            font-family: monospace;
+            font-size: 11px;
+            color: #0f0;
+            height: 80px;
+            overflow-y: auto;
             opacity: 0.7;
-            text-decoration: underline;
+            text-align: left;
         }
     </style>
 </head>
@@ -40,22 +131,45 @@
         <div id="dropzone" class="dropzone">
             <div class="dropzone-content">
                 <div class="dropzone-icon">🌫️</div>
-                <h2>動画を砂嵐へ変換</h2>
-                <p>静止しているものは、背景のノイズと同化して消滅します。<br>
-                    動いているものだけが、ザラついた「違和感」として現れます。</p>
+                <h2>動画を選択</h2>
                 <label class="file-select-btn">
-                    動画を選択
+                    ファイルを選択
                     <input type="file" id="fileInput" accept="video/mp4,video/webm" hidden>
                 </label>
             </div>
         </div>
 
         <div id="resultContainer" class="result-container">
-            <img id="resultImage" src="" alt="Processing Result">
-            <div class="status-badge" id="statusMessage">ノイズ同期中...</div>
+            <!-- 高速処理中のローダー -->
+            <div id="loader" class="processing-loader"></div>
+
+            <!-- プレビュー画像 -->
+            <img id="resultImage" src="" alt="Processing Preview">
+
+            <!-- 情緒的フィードバックAA -->
+            <pre id="asciiArt" class="ascii-art-container"></pre>
+
+            <div class="status-badge" id="statusMessage">信号待機中...</div>
+
+            <!-- プログレスバー -->
+            <div id="progressContainer" class="progress-container">
+                <div id="progressBar" class="progress-bar"></div>
+            </div>
+
+            <!-- ログビューアー -->
+            <div id="logConsole" class="log-console">
+                > System initialized. Waiting for input...
+            </div>
+
             <div class="button-group">
+                <button id="skipBtn" class="control-btn primary">
+                    <span>🚀</span> NITROモード（C++級速）
+                </button>
+                <button id="downloadBtn" class="control-btn success">
+                    <span>📥</span> MP4を直接ダウンロード
+                </button>
                 <button id="resetBtn" class="control-btn danger">
-                    <span>🔄</span> 解析リセット
+                    <span>🔄</span> リセット
                 </button>
             </div>
         </div>
@@ -67,7 +181,6 @@
             <p>Repo: <a href="https://github.com/qawsedrftgyhujikolpa/mp4-noice"
                     target="_blank">github.com/qawsedrftgyhujikolpa/mp4-noice</a></p>
         </div>
-        <p style="margin-top: 1.5rem; font-size: 0.7rem; opacity: 0.5;">🚀 Built by AntiGravity Agent</p>
     </footer>
 
     <script src="main.js"></script>
